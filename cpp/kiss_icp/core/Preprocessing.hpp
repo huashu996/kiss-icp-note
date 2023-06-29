@@ -26,9 +26,13 @@
 #include <sophus/se3.hpp>
 #include <utility>
 #include <vector>
-
+#include <pcl/point_cloud.h>
+#include <pcl/point_types.h>
 namespace kiss_icp {
-
+typedef pcl::PointXYZINormal PointTypeIN;
+typedef pcl::PointCloud<PointTypeIN>    PointCloudXYZIN;
+typedef pcl::PointXYZRGB ColorPointType;
+typedef pcl::PointCloud<ColorPointType>  PointCloudXYZRGB;
 /// Crop the frame with max/min ranges
 std::vector<Eigen::Vector3d> Preprocess(const std::vector<Eigen::Vector3d> &frame,
                                         double max_range,
@@ -42,4 +46,7 @@ std::vector<Eigen::Vector3d> CorrectKITTIScan(const std::vector<Eigen::Vector3d>
 /// Voxelize point cloud keeping the original coordinates
 std::vector<Eigen::Vector3d> VoxelDownsample(const std::vector<Eigen::Vector3d> &frame,
                                              double voxel_size);
+PointCloudXYZIN::Ptr PCL_VoxelDownsample(const PointCloudXYZIN::Ptr& input_cloud, double voxel_size);
+PointCloudXYZIN::Ptr PCL_Preprocess(const PointCloudXYZIN::Ptr& frame, double max_range,double min_range);
+pcl::PointCloud<ColorPointType>::Ptr PCL_Color_VoxelDownsample(const pcl::PointCloud<ColorPointType>::ConstPtr& input_cloud, double voxel_size);
 }  // namespace kiss_icp

@@ -25,12 +25,19 @@
 #include <Eigen/Core>
 #include <sophus/se3.hpp>
 #include <vector>
+#include <pcl/point_cloud.h>
+#include <pcl/point_types.h>
 //这段代码定义了一个命名空间 kiss_icp，其中包含一个函数 DeSkewScan
 namespace kiss_icp {
-
+typedef pcl::PointXYZINormal PointTypeIN;
+typedef pcl::PointCloud<PointTypeIN>    PointCloudXYZIN;
 /// Compensate the frame by estimatng the velocity between the given poses
 std::vector<Eigen::Vector3d> DeSkewScan(const std::vector<Eigen::Vector3d> &frame,
                                         const std::vector<double> &timestamps,
                                         const Sophus::SE3d &start_pose,
                                         const Sophus::SE3d &finish_pose);
+PointCloudXYZIN::Ptr livox_DeSkewScan(const PointCloudXYZIN::Ptr& frame,
+                                                const std::vector<double> &timestamps,
+                                                const Sophus::SE3d &start_pose,
+                                                const Sophus::SE3d &finish_pose);
 }  // namespace kiss_icp

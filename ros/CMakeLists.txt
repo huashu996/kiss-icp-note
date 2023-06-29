@@ -45,11 +45,14 @@ if("$ENV{ROS_VERSION}" STREQUAL "1")
   find_package(
     catkin REQUIRED
     COMPONENTS geometry_msgs
+    		   livox_ros_driver
+    		   cv_bridge
                nav_msgs
                sensor_msgs
                roscpp
                rosbag
                std_msgs
+               pcl_conversions
                tf2
                tf2_ros)
   catkin_package()
@@ -62,7 +65,8 @@ if("$ENV{ROS_VERSION}" STREQUAL "1")
   install(DIRECTORY launch DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION})
 elseif("$ENV{ROS_VERSION}" STREQUAL "2")
   message(STATUS "KISS-ICP-ROS2 wrapper will be compiled")
-
+  find_package(OpenCV 3 REQUIRED)
+  find_package(PCL 1.7 REQUIRED)
   find_package(ament_cmake REQUIRED)
   find_package(nav_msgs REQUIRED)
   find_package(rclcpp REQUIRED)

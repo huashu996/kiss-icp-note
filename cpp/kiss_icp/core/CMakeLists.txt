@@ -20,8 +20,20 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-float-conversion")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-float-conversion")
+
+find_package(OpenCV 3 REQUIRED)
+find_package(PCL 1.7 REQUIRED)
+find_package(OpenMP REQUIRED)
+
 add_library(core STATIC)
 add_library(kiss_icp::core ALIAS core)
-target_sources(core PRIVATE Registration.cpp Deskew.cpp VoxelHashMap.cpp Preprocessing.cpp Threshold.cpp)
-target_link_libraries(core PUBLIC Eigen3::Eigen tsl::robin_map TBB::tbb Sophus::Sophus)
+
+target_sources(core PRIVATE Registration.cpp Registration_color.cpp Deskew.cpp VoxelHashMap.cpp VoxelHashMap_color.cpp Preprocessing.cpp Threshold.cpp RGB_completed.cpp)
+
+target_link_libraries(core PUBLIC Eigen3::Eigen tsl::robin_map TBB::tbb Sophus::Sophus ${OpenCV_LIBS} ${PCL_LIBRARIES} OpenMP::OpenMP_CXX)
+
 set_global_target_properties(core)
+
+

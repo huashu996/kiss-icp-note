@@ -36,9 +36,53 @@
 #include <Eigen/Core>
 #include <sophus/se3.hpp>
 #include <vector>
-
+using Vector6d = Eigen::Matrix<double, 6, 1>;
 namespace kiss_icp {
 //使用结构体可以简化代码，使它们更加轻量级和易于使用。
+struct Color_VoxelHashMap {
+	using Vector3dVector = std::vector<Eigen::Vector3d>;
+	using Vector6dVector = std::vector<Vector6d>;
+	using Vector6dVectorTuple = std::tuple<Vector6dVector, Vector6dVector>;
+	using Vector6i = Eigen::Matrix<int, 6, 1>;
+	using Color_Voxel = Vector6i;
+	using Voxel = Eigen::Vector3i;
+    //自定义hash值的类型
+    
+    struct Color_VoxelBlock {
+        std::vector<Vector6d> points;
+        int num_points_;
+        inline void AddPoint(const Vector6d &point) {
+            if (points.size() < static_cast<size_t>(num_points_)) points.push_back(point);
+        }
+    };
+    
+    //计算哈希值
+	struct Color_VoxelHash {
+        size_t operator()(const Voxel &voxel) const {
+            const uint32_t *vec = reinterpret_cast<const uint32_t *>(voxel.data());
+            return ((1 << 20) - 1) & (vec[0] * 73856093 ^ vec[1] * 19349663 ^ vec[2] * 83492791);
+        }
+	};
+
+    
+    explicit Color_VoxelHashMap(double voxel_size, double max_distance, int max_points_per_voxel)
+        : voxel_size_(voxel_size),
+          max_distance_(max_distance),
+          max_points_per_voxel_(max_points_per_voxel) {}
+          
+    Vector6dVectorTuple Color_GetCorrespondences(const Vector6dVector &points, double max_correspondance_distance) const;
+    inline void Color_Clear() { colormap_.clear(); }
+    inline bool Color_Empty() const { return colormap_.empty(); }
+    void Color_Update(const std::vector<Vector6d> &points, const Eigen::Vector3d &origin);
+    void Color_Update(const std::vector<Vector6d> &points, const Sophus::SE3d &pose);
+    void Color_AddPoints(const std::vector<Vector6d> &points);
+    void Color_RemovePointsFarFromLocation(const Eigen::Vector3d &origin);
+    std::vector<Vector6d> Pointcloud() const;
+    double voxel_size_;
+    double max_distance_;
+    int max_points_per_voxel_;
+    tsl::robin_map<Voxel, Color_VoxelBlock, Color_VoxelHash> colormap_; //键的类型为 Voxel，值的类型为 VoxelBlock，哈希函数的类型为 VoxelHash。
+};
 struct VoxelHashMap {
     using Vector3dVector = std::vector<Eigen::Vector3d>;
     using Vector3dVectorTuple = std::tuple<Vector3dVector, Vector3dVector>;

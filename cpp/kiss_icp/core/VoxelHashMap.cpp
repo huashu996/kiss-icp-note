@@ -115,24 +115,19 @@ VoxelHashMap::Vector3dVectorTuple VoxelHashMap::GetCorrespondences(
 		最终结果存储在累加器对象中，可以根据需要进行处理。
 	*/
     using points_iterator = std::vector<Eigen::Vector3d>::const_iterator;
-    //使用 tbb::parallel_reduce 函数进行并行计算，计算每个点的最近邻点，并将源点和最近邻点存储在 source 和 target 向量中。
     const auto [source, target] = tbb::parallel_reduce(
-        // Range
-         // 定义一个 blocked_range 对象，指定待处理数据的迭代器范围
+         // 1.Range，指定待处理数据的迭代器范围
         tbb::blocked_range<points_iterator>{points.cbegin(), points.cend()},
-        // Identity
-        // 定义一个 ResultTuple 对象，指定源点和最近邻点的容量
+        //  2.Identity 指定源点和最近邻点的容量
         ResultTuple(points.size()),
-        // 1st lambda: Parallel computation
-        // 定义一个 lambda 表达式，进行并行计算
+		//  3.1st lambda  它使用 GetClosestNeighboor 函数计算每个点的最近邻点，并根据最大对应距离筛选出满足条件的点
         [max_correspondance_distance, &GetClosestNeighboor](
             const tbb::blocked_range<points_iterator> &r, ResultTuple res) -> ResultTuple {
-             // 获取源点和最近邻点的向量引用
             auto &[src, tgt] = res;
              // 预分配存储空间
             src.reserve(r.size());
             tgt.reserve(r.size());
-             // 处理迭代器范围内的每个点
+             // 迭代器搜索最近点
             for (const auto &point : r) {
                 Eigen::Vector3d closest_neighboors = GetClosestNeighboor(point);
                 if ((closest_neighboors - point).norm() < max_correspondance_distance) {
@@ -143,7 +138,7 @@ VoxelHashMap::Vector3dVectorTuple VoxelHashMap::GetCorrespondences(
             // 返回计算结果
             return res;
         },
-        // 2nd lambda: Parallel reduction
+        // 4. 2nd lambda: Parallel reduction用于在并行计算完成后对结果进行归约
         [](ResultTuple a, const ResultTuple &b) -> ResultTuple {
              // 获取源点和最近邻点的向量引用
             auto &[src, tgt] = a;
@@ -156,7 +151,6 @@ VoxelHashMap::Vector3dVectorTuple VoxelHashMap::GetCorrespondences(
             return a;
         }
         );
-
     return std::make_tuple(source, target);
 }
 

@@ -27,11 +27,17 @@
 #include <vector>
 
 #include "VoxelHashMap.hpp"
-
+using Vector6d = Eigen::Matrix<double, 6, 1>;
+using Vector6dVector = std::vector<Vector6d>;
 namespace kiss_icp {
 
 Sophus::SE3d RegisterFrame(const std::vector<Eigen::Vector3d> &frame,
                            const VoxelHashMap &voxel_map,
+                           const Sophus::SE3d &initial_guess,
+                           double max_correspondence_distance,
+                           double kernel);
+Sophus::SE3d Color_RegisterFrame(const Vector6dVector &frame,
+                           const Color_VoxelHashMap &voxel_map,
                            const Sophus::SE3d &initial_guess,
                            double max_correspondence_distance,
                            double kernel);

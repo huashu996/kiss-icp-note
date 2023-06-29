@@ -24,7 +24,6 @@
 
 #include <tbb/blocked_range.h>
 #include <tbb/parallel_reduce.h>
-
 #include <algorithm>
 #include <cmath>
 #include <sophus/se3.hpp>
@@ -56,80 +55,85 @@ struct ResultTuple {
     Eigen::Matrix6d JTJ;
     Eigen::Vector6d JTr;
 };
-//点云变换
-void TransformPoints(const Sophus::SE3d &T, std::vector<Eigen::Vector3d> &points) {
-    std::transform(points.cbegin(), points.cend(), points.begin(),
-                   [&](const auto &point) { return T * point; });
 }
+void Color_TransformPoints(const Sophus::SE3d &T, Vector6dVector &points) {
+    std::transform(points.cbegin(), points.cend(), points.begin(),
+                   [&](const auto &point) { 
+                   Eigen::Vector4d homogeneous_point(point[0], point[1], point[2], 1.0);
+				   Eigen::Vector4d transformed_homogeneous_point = T.matrix() * homogeneous_point;
+				   Eigen::Vector6d transformed_point;
+				   transformed_point << transformed_homogeneous_point[0], transformed_homogeneous_point[1], transformed_homogeneous_point[2], point[3], point[4], point[5];
+  				   return transformed_point; });
+}
+
 //对齐点云
-Sophus::SE3d AlignClouds(const std::vector<Eigen::Vector3d> &source,
-                         const std::vector<Eigen::Vector3d> &target,
+Sophus::SE3d Color_AlignClouds(const std::vector<Eigen::Vector6d> &source,
+                         const std::vector<Eigen::Vector6d> &target,
                          double th) {
-    auto compute_jacobian_and_residual = [&](auto i) {
-        // 计算残差：residual = source[i] - target[i]
-        const Eigen::Vector3d residual = source[i] - target[i];
-        // 计算雅可比矩阵 J_r
-        Eigen::Matrix3_6d J_r;
+    auto compute_jacobian_and_residual = [&](auto i) {  //它计算每个点的雅可比矩阵和残差
+     	const Eigen::Vector3d pos_residual = (source[i].template head<3>() - target[i].template head<3>()).template cast<double>();
+        const Eigen::Vector3d color_residual = (source[i].template tail<3>() - target[i].template tail<3>()).template cast<double>();
+        Eigen::Matrix3_6d J_r;   //创建雅可比矩阵
         J_r.block<3, 3>(0, 0) = Eigen::Matrix3d::Identity();
-        J_r.block<3, 3>(0, 3) = -1.0 * Sophus::SO3d::hat(source[i]);
-        return std::make_tuple(J_r, residual);
+        J_r.block<3, 3>(0, 3) = -1.0 * Sophus::SO3d::hat((source[i].template head<3>()).template cast<double>());
+        Eigen::Matrix3_6d J_c;   // 创建颜色残差对优化变量的雅可比矩阵
+    	J_c.block<3, 3>(0, 0) = Eigen::Matrix3d::Identity();
+        J_c.block<3, 3>(0, 3) = -1.0 * Sophus::SO3d::hat((source[i].template tail<3>()).template cast<double>());
+        return std::make_tuple(J_r,J_c, pos_residual, color_residual);
     };
-	 // 将JTJ和JTr初始化为单位矩阵和零矩阵
-    const auto &[JTJ, JTr] = tbb::parallel_reduce(
+
+    const auto &[JTJ, JTr] = tbb::parallel_reduce( //函数并行地计算雅可比矩阵和残差的和，以用于后续的优化
         // Range
         tbb::blocked_range<size_t>{0, source.size()},
         // Identity
         ResultTuple(),
         // 1st Lambda: Parallel computation
         [&](const tbb::blocked_range<size_t> &r, ResultTuple J) -> ResultTuple {
-        	//使得较大的残差具有较小的权重
             auto Weight = [&](double residual2) { return square(th) / square(th + residual2); };
-            auto &[JTJ_private, JTr_private] = J;
+            auto &[JTJ_private, JTr_private] = J;  
             for (auto i = r.begin(); i < r.end(); ++i) {
-                const auto &[J_r, residual] = compute_jacobian_and_residual(i);
-                const double w = Weight(residual.squaredNorm());
-                JTJ_private.noalias() += J_r.transpose() * w * J_r;
-                JTr_private.noalias() += J_r.transpose() * w * residual;
+                const auto &[J_r, J_c,pos_residual, color_residual] = compute_jacobian_and_residual(i);
+                const double w = Weight(pos_residual.squaredNorm());
+                const double wc = Weight(color_residual.squaredNorm());
+                JTJ_private.noalias() += J_r.transpose() * w * J_r;  //JTJ_private用于存储雅可比矩阵累加结果的矩阵
+                JTr_private.noalias() += J_r.transpose() * w * pos_residual;  //JTr_private是用于存储残差累加结果的向量。
+    			JTr_private.noalias() += 0.1*(J_c.transpose() * wc * color_residual); // 加入颜色残差部分 最佳0.5 ---------------作用不大
             }
             return J;
         },
-        // 第二个Lambda：并行降低私有雅可比矩阵
         // 2nd Lambda: Parallel reduction of the private Jacboians
         [&](ResultTuple a, const ResultTuple &b) -> ResultTuple { return a + b; });
-	// 使用LDLT分解解线性系统：JTJ * x = -JTr
-    const Eigen::Vector6d x = JTJ.ldlt().solve(-JTr);
-    // 计算扭矩x的指数映射，得到SE3变换
-    return Sophus::SE3d::exp(x);
+
+    const Eigen::Vector6d x = JTJ.ldlt().solve(-JTr);  //其中JTJ是雅可比矩阵的和，JTr是残差的和，使用Eigen::Vector6d x = JTJ.ldlt().solve(-JTr)求解得到优化变量x。
+    return Sophus::SE3d::exp(x); //将优化变量转换为刚体变换
 }
 
 constexpr int MAX_NUM_ITERATIONS_ = 500;
 constexpr double ESTIMATION_THRESHOLD_ = 0.0001;
 
-}  // namespace
-
 namespace kiss_icp {
-
-Sophus::SE3d RegisterFrame(const std::vector<Eigen::Vector3d> &frame,
-                           const VoxelHashMap &voxel_map,
+Sophus::SE3d Color_RegisterFrame(const Vector6dVector &frame,
+                           const Color_VoxelHashMap &color_voxel_map,
                            const Sophus::SE3d &initial_guess,
                            double max_correspondence_distance,
                            double kernel) {
-    if (voxel_map.Empty()) return initial_guess;
+    if (color_voxel_map.Color_Empty()) return initial_guess;
 
-    //1.根据初始位姿更新点云
-    std::vector<Eigen::Vector3d> source = frame; //接收点云
-    TransformPoints(initial_guess, source);  //根据先验位姿更新函数
+    // Equation (9)
+    Vector6dVector source = frame; //接收点云
+    Color_TransformPoints(initial_guess, source);  //根据先验位姿更新函数
 
     // ICP-loop
-    // 2.ICP计算位姿
+    // ICP计算位姿
+
     Sophus::SE3d T_icp = Sophus::SE3d();
     for (int j = 0; j < MAX_NUM_ITERATIONS_; ++j) {
-        // 2.1 在voxel_map中找到对应的匹配点云
-        const auto &[src, tgt] = voxel_map.GetCorrespondences(source, max_correspondence_distance); //匹配对于点
-        // 2.2 两点云进行ICP匹配
-        auto estimation = AlignClouds(src, tgt, kernel);
-        // 2.3 更新位姿迭代
-        TransformPoints(estimation, source);
+        // Equation (10)
+        const auto &[src, tgt] = color_voxel_map.Color_GetCorrespondences(source, max_correspondence_distance); //匹配对于点
+        // Equation (11)
+        auto estimation = Color_AlignClouds(src, tgt, kernel);
+        // Equation (12)
+        Color_TransformPoints(estimation, source);
         // Update iterations
         T_icp = estimation * T_icp;
         // Termination criteria

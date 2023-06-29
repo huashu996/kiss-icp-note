@@ -31,9 +31,13 @@
 #include "kiss_icp/core/Preprocessing.hpp"
 #include "kiss_icp/core/Registration.hpp"
 #include "kiss_icp/core/VoxelHashMap.hpp"
-
+using namespace std;
 namespace kiss_icp::pipeline {
-
+std::ostream& operator<<(std::ostream& os, const Sophus::SE3d& se3) {
+    os << "Translation: " << se3.translation().transpose() << std::endl;
+    os << "Rotation matrix:\n" << se3.rotationMatrix() << std::endl;
+    return os;
+}
 KissICP::Vector3dVectorTuple KissICP::RegisterFrame(const std::vector<Eigen::Vector3d> &frame,
                                                     const std::vector<double> &timestamps) {
     const auto &deskew_frame = [&]() -> std::vector<Eigen::Vector3d> {
@@ -69,7 +73,9 @@ KissICP::Vector3dVectorTuple KissICP::RegisterFrame(const std::vector<Eigen::Vec
     const auto prediction = GetPredictionModel(); //prediction 表示历史位姿信息中计算出来的从上一帧点云到当前点云的位姿变换。
     const auto last_pose = !poses_.empty() ? poses_.back() : Sophus::SE3d(); //last_pose 可以看作是当前点云的上一帧点云在全局坐标系下的位姿。
     const auto initial_guess = last_pose * prediction;//一个从上一帧点云的位姿到当前点云的位姿变换
-
+	cout<<"sigma"<<sigma<<endl;
+	cout<<"prediction"<<prediction<<endl;
+	cout<<"initial_guess"<<initial_guess<<endl;
     // Run icp
     //1.5 ICP后验更新位姿
     const Sophus::SE3d new_pose = kiss_icp::RegisterFrame(source,  //下采样的点云     //kiss_icp空间下的RegisterFrame函数
@@ -91,7 +97,7 @@ KissICP::Vector3dVectorTuple KissICP::Voxelize(const std::vector<Eigen::Vector3d
     const auto source = kiss_icp::VoxelDownsample(frame_downsample, voxel_size * 1.5);
     return {source, frame_downsample}; //返回两个下采样点云
 }
-
+//初始化阈值
 double KissICP::GetAdaptiveThreshold() {
     if (!HasMoved()) {
         return config_.initial_threshold;
